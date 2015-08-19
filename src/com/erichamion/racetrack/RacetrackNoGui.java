@@ -9,32 +9,29 @@ import java.util.Scanner;
 
 public class RacetrackNoGui {
 
-    private static final Map<Character, int[]> KEYMAP = new HashMap<>();
-    private static final int ROW = 0;
-    private static final int COL = 1;
+    private static final Map<Character, GridPoint> KEYMAP = new HashMap<>();
     private static final Scanner STDIN = new Scanner(System.in);
 
     static {
-        KEYMAP.put('1', new int[] {1, -1});
-        KEYMAP.put('2', new int[] {1, 0});
-        KEYMAP.put('3', new int[] {1, 1});
-        KEYMAP.put('4', new int[] {0, -1});
-        KEYMAP.put('5', new int[] {0, 0});
-        KEYMAP.put('6', new int[] {0, 1});
-        KEYMAP.put('7', new int[] {-1, -1});
-        KEYMAP.put('8', new int[] {-1, 0});
-        KEYMAP.put('9', new int[] {-1, 1});
+        KEYMAP.put('1', new GridPoint(1, -1));
+        KEYMAP.put('2', new GridPoint(1, 0));
+        KEYMAP.put('3', new GridPoint(1, 1));
+        KEYMAP.put('4', new GridPoint(0, -1));
+        KEYMAP.put('5', new GridPoint(0, 0));
+        KEYMAP.put('6', new GridPoint(0, 1));
+        KEYMAP.put('7', new GridPoint(-1, -1));
+        KEYMAP.put('8', new GridPoint(-1, 0));
+        KEYMAP.put('9', new GridPoint(-1, 1));
     }
 
     public static void main(String[] args) {
-        if (args.length == 0 || (args[0].equals("--gui") && args.length == 1)) {
+        if (args.length == 0) {
             System.err.println("No filename given\n");
             printUsage(System.err);
             return;
         }
 
-        boolean useGui = args[0].equals("--gui");
-        String filename = args[useGui ? 1 : 0];
+        String filename = args[0];
 
         Track track;
         try {
@@ -46,6 +43,9 @@ public class RacetrackNoGui {
             System.err.println("Could not find file '" + filename + "'");
             return;
         }
+
+        Pathfinder player2finder = new Pathfinder(track, 1);
+
 
         runTextGame(track);
     }
@@ -67,8 +67,8 @@ public class RacetrackNoGui {
         System.out.println(outStr);
     }
 
-    private static int[] getTextInput(String prompt, Track track) {
-        int[] result = null;
+    private static GridPoint getTextInput(String prompt, Track track) {
+        GridPoint result = null;
         do {
             System.out.print(prompt + ": ");
             char inputChar = STDIN.nextLine().charAt(0);
@@ -77,7 +77,7 @@ public class RacetrackNoGui {
             } else if (inputChar == 't') {
                 System.out.println(track.toString());
             } else if (KEYMAP.containsKey(inputChar)) {
-                result = KEYMAP.get(inputChar).clone();
+                result = new GridPoint(KEYMAP.get(inputChar));
             }
         } while (result == null);
 
@@ -88,8 +88,8 @@ public class RacetrackNoGui {
         while (track.getWinner() == Track.NO_WINNER) {
             System.out.println(track.toString());
             System.out.println("\nPLAYER " + (track.getCurrentPlayer() + 1) + ":");
-            int[] acceleration = getTextInput("Acceleration direction (h for help)", track);
-            track.doPlayerTurn(acceleration[COL], acceleration[ROW]);
+            GridPoint acceleration = getTextInput("Acceleration direction (h for help)", track);
+            track.doPlayerTurn(acceleration);
         }
         System.out.println(track.toString());
         System.out.println();

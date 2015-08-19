@@ -12,8 +12,6 @@ public class Track {
 
     private static final char CRASH_INDICATOR = 'X';
     private static final char[] PLAYER_INDICATORS = {'@', '$'};
-    private static final int ROW = 0;
-    private static final int COL = 1;
 
     private Player[] mPlayers = {null, null};
     private int mWidth = 0;
@@ -90,7 +88,7 @@ public class Track {
                 boolean hasPlayer = false;
                 for (int playerNum = 0; playerNum < mPlayers.length; playerNum++) {
                     Player player = mPlayers[playerNum];
-                    if (player.getCol() == colIndex && player.getRow() == rowIndex) {
+                    if (player.getPos().getCol() == colIndex && player.getPos().getRow() == rowIndex) {
                         hasPlayer = true;
                         result.append(currentSpace == SpaceType.WALL ? CRASH_INDICATOR : PLAYER_INDICATORS[playerNum]);
                     }
@@ -139,6 +137,24 @@ public class Track {
     }
 
     /**
+     * Find the position of the specified player.
+     * @param player The zero-based player number
+     * @return A GridPoint containing the player's current position
+     */
+    public GridPoint getPlayerPos(int player) {
+        return mPlayers[player].getPos();
+    }
+
+    /**
+     * Find the velocity of the specified player.
+     * @param player The zero-based player number
+     * @return A GridPoint containing the player's current velocity
+     */
+    public GridPoint getPlayerVelocity(int player) {
+        return mPlayers[player].getVelocity();
+    }
+
+    /**
      * Return the winner of the game. If the game is still in progress,
      * returns NO_WINNER.
      * @return The winning player (zero-based, see getCurrentPlayer()),
@@ -150,16 +166,14 @@ public class Track {
 
     /**
      * Accelerate the current player, and update the track state.
-     * @param colAcceleration The current player's acceleration in the
-     *                        column direction
-     * @param rowAcceleration The current player's acceleration in the row
+     * @param acceleration The current player's acceleration in each
      *                        direction
      */
-    public void doPlayerTurn(int colAcceleration, int rowAcceleration) {
+    public void doPlayerTurn(GridPoint acceleration) {
         Player player = mPlayers[mCurrentPlayer];
         if (player.isCrashed() || mWinner != NO_WINNER) return;
 
-        player.accelerate(colAcceleration, rowAcceleration);
+        player.accelerate(acceleration);
         moveCurrentPlayer();
 
         if (player.isCrashed()) {
@@ -207,18 +221,14 @@ public class Track {
         Player player = mPlayers[mCurrentPlayer];
 
         // Check for collisions and for winning
-        int[] startPoint = new int[2];
-        startPoint[ROW] = player.getRow();
-        startPoint[COL] = player.getCol();
-        int[] endPoint = new int[2];
-        endPoint[ROW] = player.getNextRow();
-        endPoint[COL] = player.getNextCol();
+        GridPoint startPoint = player.getPos();
+        GridPoint endPoint = player.getNextPos();
 
-        Set<int[]> pathPoints = getPath(startPoint, endPoint);
-        int[] winPoint = null;
-        int[] winDirection = {0, 0};
-        for (int[] currentPoint : pathPoints) {
-            switch(getSpace(currentPoint[ROW], currentPoint[COL])) {
+        Set<GridPoint> pathPoints = getPath(startPoint, endPoint);
+        GridPoint winPoint = null;
+        GridPoint winDirection = new GridPoint(0, 0);
+        for (GridPoint currentPoint : pathPoints) {
+            switch(getSpace(currentPoint)) {
                 case TRACK:
                     // No problems here, do nothing
                     break;
@@ -226,24 +236,24 @@ public class Track {
                     // Crash, and move directly to the location that
                     // caused the crash. No need to keep going
                     player.crash();
-                    player.setPos(currentPoint[ROW], currentPoint[COL]);
+                    player.setPos(currentPoint);
                     return;
                 case FINISH_UP:
                     // For all of the finishes, set up a potential win,
                     // but don't act on it yet. We still might crash.
-                    winDirection[ROW] = -1;
+                    winDirection.setRow(-1);
                     winPoint = currentPoint;
                     break;
                 case FINISH_DOWN:
-                    winDirection[ROW] = 1;
+                    winDirection.setRow(1);
                     winPoint = currentPoint;
                     break;
                 case FINISH_LEFT:
-                    winDirection[COL] = -1;
+                    winDirection.setCol(-1);
                     winPoint = currentPoint;
                     break;
                 case FINISH_RIGHT:
-                    winDirection[COL] = 1;
+                    winDirection.setCol(1);
                     winPoint = currentPoint;
                     break;
             }
@@ -252,13 +262,15 @@ public class Track {
         // Test for win
         if (winPoint != null) {
             boolean isValidWin = true;
-            if ((winDirection[ROW] != 0 && !Util.isSignSame(winDirection[ROW], player.getRowVelocity())) ||
-                    (winDirection[COL] != 0 && !Util.isSignSame(winDirection[COL], player.getColVelocity()))) {
+            if ((winDirection.getRow() != 0 && !Util.isSignSame(winDirection.getRow(), player.getVelocity().getRow()))
+                    ||
+                    (winDirection.getCol() != 0 &&
+                            !Util.isSignSame(winDirection.getCol(), player.getVelocity().getCol()))) {
                 isValidWin = false;
             }
             if (isValidWin) {
                 mWinner = mCurrentPlayer;
-                player.setPos(winDirection[ROW], winDirection[COL]);
+                player.setPos(winPoint);
                 return;
             }
         }
@@ -269,15 +281,13 @@ public class Track {
 
     /**
      * Returns all of the grid spaces in the path between two spaces.
-     * @param startPoint Starting point as an array of length 2, in row-
-     *                   column order
-     * @param endPoint Ending point as an array of length 2, with row
-     *                 first
-     * @return Intervening grid spaces, as a List of int arrays. Also
+     * @param startPoint Starting point as a GridPoint
+     * @param endPoint Ending point as a GridPoint
+     * @return Intervening grid spaces, as a List of GridPoints. Also
      * includes the starting and ending grid spaces. Each space is given
      * by a an array of length 2, with row first, followed by column.
      */
-    private Set<int[]> getPath(final int[] startPoint, final int[] endPoint) {
+    public Set<GridPoint> getPath(final GridPoint startPoint, final GridPoint endPoint) {
         // First, pick the axis that has the largest movement.
         // For every grid boundary along that axis, test the line of
         // motion at both the center and the edges of the the cell,
@@ -290,53 +300,55 @@ public class Track {
 
         final double EPS = 1e-8;
 
-        Set<int[]> result = new HashSet<>();
+        Set<GridPoint> result = new HashSet<>();
 
         // If there's no movement, no need to do anything. Just return the
         // starting position.
-        if (Arrays.equals(startPoint, endPoint)) {
-            result.add(startPoint.clone());
+        if (startPoint.equals(endPoint)) {
+            result.add(new GridPoint(startPoint));
             return result;
         }
 
-        int[] difference = new int[2];
-        difference[ROW] = endPoint[ROW] - startPoint[ROW];
-        difference[COL] = endPoint[COL] - startPoint[COL];
-        int[] distance = new int[2];
-        distance[ROW] = Math.abs(difference[ROW]);
-        distance[COL] = Math.abs(difference[COL]);
+        GridPoint difference = new GridPoint(endPoint.getRow() - startPoint.getRow(),
+                endPoint.getCol() - startPoint.getCol());
+        GridPoint distance = new GridPoint(Math.abs(difference.getRow()), Math.abs(difference.getCol()));
 
-        int mainAxis = (distance[ROW] > distance[COL]) ? ROW : COL;
-        int secondAxis = 1 - mainAxis;
-        double slope = (double) difference[secondAxis] / difference[mainAxis];
-        int stepDirection = (difference[mainAxis] > 0) ? 1 : -1;
+        GridPoint.Axis mainAxis =
+                (distance.getValueOnAxis(GridPoint.Axis.ROW) > distance.getValueOnAxis(GridPoint.Axis.COL)) ?
+                        GridPoint.Axis.ROW : GridPoint.Axis.COL;
+        GridPoint.Axis secondAxis = (mainAxis == GridPoint.Axis.ROW) ? GridPoint.Axis.COL : GridPoint.Axis.ROW;
+        double slope = (double) difference.getValueOnAxis(secondAxis) / difference.getValueOnAxis(mainAxis);
+        int stepDirection = (difference.getValueOnAxis(mainAxis) > 0) ? 1 : -1;
 
-        int mainCoord = startPoint[mainAxis];
-        while (mainCoord != endPoint[mainAxis]) {
+        int mainCoord = startPoint.getValueOnAxis(mainAxis);
+        while (mainCoord != endPoint.getValueOnAxis(mainAxis)) {
             // Integer coordinate - if applicable, add just the single
             // grid space.
-            double secondCoord = Util.getHeightOfLine(slope, startPoint[mainAxis], startPoint[secondAxis], mainCoord);
+            double secondCoord = Util.getHeightOfLine(slope, startPoint.getValueOnAxis(mainAxis),
+                    startPoint.getValueOnAxis(secondAxis), mainCoord);
             if (!Util.isHalfInteger(secondCoord, EPS)) {
-                int[] newPoint = new int[2];
-                newPoint[mainAxis] = mainCoord;
-                newPoint[secondAxis] = (int) Math.round(secondCoord);
+                GridPoint newPoint = new GridPoint();
+                newPoint.setValueOnAxis(mainAxis, mainCoord);
+                newPoint.setValueOnAxis(secondAxis, (int) Math.round(secondCoord));
                 result.add(newPoint);
             }
             // Half-integer coordinate - if applicable, add the grid
             // spaces to either side
             double mainHalfCoord = mainCoord + (stepDirection * 0.5);
-            double secondHalfCoord = Util.getHeightOfLine(slope, startPoint[mainAxis], startPoint[secondAxis],
-                    mainHalfCoord);
+            double secondHalfCoord = Util.getHeightOfLine(slope, startPoint.getValueOnAxis(mainAxis),
+                    startPoint.getValueOnAxis(secondAxis), mainHalfCoord);
             if (!Util.isHalfInteger(secondHalfCoord, EPS)) {
                 // Probably not the best names here, but I'm not sure what
                 // would be better. If the main axis is the column axis,
                 // and if the endPoint is to the right of the startPoint,
                 // then the names leftPoint and rightPoint are accurate.
-                int[] leftPoint = new int[2];
-                int[] rightPoint = new int[2];
-                leftPoint[secondAxis] = rightPoint[secondAxis] = (int) Math.round(secondHalfCoord);
-                leftPoint[mainAxis] = mainCoord;
-                rightPoint[mainAxis] = mainCoord + stepDirection;
+                GridPoint leftPoint = new GridPoint();
+                GridPoint rightPoint = new GridPoint();
+                int secondHalfInt = (int) Math.round(secondHalfCoord);
+                leftPoint.setValueOnAxis(secondAxis, secondHalfInt);
+                rightPoint.setValueOnAxis(secondAxis, secondHalfInt);
+                leftPoint.setValueOnAxis(mainAxis, mainCoord);
+                rightPoint.setValueOnAxis(mainAxis, mainCoord + stepDirection);
                 result.add(leftPoint);
                 result.add(rightPoint);
             }
@@ -344,7 +356,7 @@ public class Track {
             mainCoord += stepDirection;
         }
 
-        result.add(endPoint.clone());
+        result.add(new GridPoint(endPoint));
 
         return result;
     }
@@ -397,18 +409,17 @@ public class Track {
         mHeight++;
     }
 
-    private SpaceType getSpace(int row, int col) {
-        // Anything out of bounds causes the car to crash, just like a
-        // wall
-        if (row >= mHeight || row < 0 || col >= mWidth || col < 0) {
+    public SpaceType getSpace(final GridPoint space) {
+        // Anything out of bounds acts like a wall
+        if (space.getRow() >= mHeight || space.getRow() < 0 || space.getCol() >= mWidth || space.getCol() < 0) {
             return SpaceType.WALL;
         }
 
-        return mGrid.get(row).get(col);
+        return mGrid.get(space.getRow()).get(space.getCol());
     }
 
 
-    private enum SpaceType {
+    public enum SpaceType {
         WALL('#'),
         TRACK(' '),
         FINISH_UP('^'),

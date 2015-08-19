@@ -1,5 +1,7 @@
 package com.erichamion.racetrack;
 
+import java.util.Iterator;
+
 /**
  * Created by me on 8/16/15.
  */
@@ -58,5 +60,24 @@ public class Util {
         int sign1 = (value1 == 0) ? 0 : value1 / Math.abs(value1);
         int sign2 = (value2 == 0) ? 0 : value2 / Math.abs(value2);
         return sign1 == sign2;
+    }
+
+    /**
+     * Returns a reference to a specified element within  an Iterable
+     * container, if such element exists. Does not remove the element
+     * from its container.
+     * @param iterable The collection or other Iterable that (potentially)
+     *                 contains the specified element
+     * @param obj An object used to select the desired element. Each
+     *            element e will be tested using e.equals(obj).
+     * @param <T> The type of element held by iterable
+     * @return If one or more element e exist such that e.equals(obj),
+     * returns the first such element. Otherwise, returns null.
+     */
+    public static <T> T getObjectFromIterable(Iterable<T> iterable, Object obj) {
+        for (T currentElement : iterable) {
+            if (currentElement.equals(obj)) return currentElement;
+        }
+        return null;
     }
 }
