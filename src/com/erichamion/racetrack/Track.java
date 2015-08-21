@@ -8,17 +8,36 @@ import java.util.*;
  * Created by me on 8/14/15.
  */
 public class Track {
+    public static final int MAX_PLAYERS = 9;
     public static final int NO_WINNER = -1;
 
     private static final char CRASH_INDICATOR = 'X';
-    private static final char[] PLAYER_INDICATORS = {'@', '$'};
 
-    private Player[] mPlayers = {null, null};
+    private List<Player> mPlayers = new ArrayList<>();
     private int mWidth = 0;
     private int mHeight = 0;
     private List<List<SpaceType>> mGrid = new ArrayList<>();
     private int mCurrentPlayer = 0;
     private int mWinner = NO_WINNER;
+
+
+    public enum SpaceType {
+        WALL('#'),
+        TRACK(' '),
+        FINISH_UP('^'),
+        FINISH_DOWN('v'),
+        FINISH_LEFT('<'),
+        FINISH_RIGHT('>');
+
+        private final char value;
+
+        SpaceType(final char c) {
+            value = c;
+        }
+
+
+    }
+
 
     /**
      * Initialize a Track from an input source.
@@ -34,11 +53,11 @@ public class Track {
      *                direction the car needs to be moving in order to
      *                successfully cross. Any other character indicates
      *                the starting position for a car, and there must be
-     *                two of these (one for each player - either the same
-     *                or different characters).
+     *                between 1 and MAX_PLAYERS of these (one for each
+     *                player - either the same or different characters).
      * @throws InvalidTrackFormatException
      */
-    public Track(Scanner scanner) throws InvalidTrackFormatException {
+    public Track(final Scanner scanner) throws InvalidTrackFormatException {
         char borderChar = '\0';
         while (scanner.hasNextLine()) {
             String currentLine = scanner.nextLine();
@@ -68,8 +87,7 @@ public class Track {
 
         // Final sanity checks
         if (mHeight == 0) throw new InvalidTrackFormatException("No track data supplied");
-        // If first player is not set, then second player must also not be set. No need to check both.
-        if (mPlayers[mPlayers.length - 1] == null) throw new InvalidTrackFormatException("Not enough player positions");
+        if (mPlayers.size() == 0) throw new InvalidTrackFormatException("No player positions");
 
         mCurrentPlayer = 0;
     }
@@ -86,11 +104,15 @@ public class Track {
             for (int colIndex = 0; colIndex < currentRow.size(); colIndex++) {
                 SpaceType currentSpace = currentRow.get(colIndex);
                 boolean hasPlayer = false;
-                for (int playerNum = 0; playerNum < mPlayers.length; playerNum++) {
-                    Player player = mPlayers[playerNum];
+                for (int playerNum = 0; playerNum < mPlayers.size(); playerNum++) {
+                    Player player = mPlayers.get(playerNum);
                     if (player.getPos().getCol() == colIndex && player.getPos().getRow() == rowIndex) {
                         hasPlayer = true;
-                        result.append(currentSpace == SpaceType.WALL ? CRASH_INDICATOR : PLAYER_INDICATORS[playerNum]);
+                        result.append(currentSpace == SpaceType.WALL ?
+                                CRASH_INDICATOR : Integer.toString(playerNum + 1));
+
+                        // Only put one player indicator in a given space
+                        break;
                     }
                 }
                 if (!hasPlayer) {
@@ -120,11 +142,11 @@ public class Track {
     }
 
     /**
-     * Return the number of players (currently fixed at 2).
+     * Return the number of players.
      * @return Number of players
      */
     public int getPlayerCount() {
-        return mPlayers.length;
+        return mPlayers.size();
     }
 
     /**
@@ -141,8 +163,8 @@ public class Track {
      * @param player The zero-based player number
      * @return A GridPoint containing the player's current position
      */
-    public GridPoint getPlayerPos(int player) {
-        return mPlayers[player].getPos();
+    public GridPoint getPlayerPos(final int player) {
+        return mPlayers.get(player).getPos();
     }
 
     /**
@@ -150,8 +172,8 @@ public class Track {
      * @param player The zero-based player number
      * @return A GridPoint containing the player's current velocity
      */
-    public GridPoint getPlayerVelocity(int player) {
-        return mPlayers[player].getVelocity();
+    public GridPoint getPlayerVelocity(final int player) {
+        return mPlayers.get(player).getVelocity();
     }
 
     /**
@@ -167,21 +189,19 @@ public class Track {
     /**
      * Accelerate the current player, and update the track state.
      * @param acceleration The current player's acceleration in each
-     *                        direction
+     *                     direction
      */
-    public void doPlayerTurn(GridPoint acceleration) {
-        Player player = mPlayers[mCurrentPlayer];
+    public void doPlayerTurn(final GridPoint acceleration) {
+        Player player = mPlayers.get(mCurrentPlayer);
         if (player.isCrashed() || mWinner != NO_WINNER) return;
 
         player.accelerate(acceleration);
         moveCurrentPlayer();
 
         if (player.isCrashed()) {
-            // With just two players, we COULD just declare the other
-            // player the winner. But what if we add more players?
             int winCandidate = -1;
-            for (int i = 0; i < mPlayers.length; i++) {
-                if (!mPlayers[i].isCrashed()) {
+            for (int i = 0; i < mPlayers.size(); i++) {
+                if (!mPlayers.get(i).isCrashed()) {
                     if (winCandidate == -1) {
                         winCandidate = i;
                     } else {
@@ -191,9 +211,9 @@ public class Track {
                         break;
                     }
                 }
-                if (winCandidate >= 0) {
-                    mWinner = winCandidate;
-                }
+            }
+            if (winCandidate >= 0) {
+                mWinner = winCandidate;
             }
         }
 
@@ -213,74 +233,13 @@ public class Track {
             if (result >= getPlayerCount()) {
                 result = 0;
             }
-        } while (mPlayers[result].isCrashed());
+        } while (mPlayers.get(result).isCrashed());
         return result;
     }
 
-    private void moveCurrentPlayer() {
-        Player player = mPlayers[mCurrentPlayer];
-
-        // Check for collisions and for winning
-        GridPoint startPoint = player.getPos();
-        GridPoint endPoint = player.getNextPos();
-
-        Set<GridPoint> pathPoints = getPath(startPoint, endPoint);
-        GridPoint winPoint = null;
-        GridPoint winDirection = new GridPoint(0, 0);
-        for (GridPoint currentPoint : pathPoints) {
-            switch(getSpace(currentPoint)) {
-                case TRACK:
-                    // No problems here, do nothing
-                    break;
-                case WALL:
-                    // Crash, and move directly to the location that
-                    // caused the crash. No need to keep going
-                    player.crash();
-                    player.setPos(currentPoint);
-                    return;
-                case FINISH_UP:
-                    // For all of the finishes, set up a potential win,
-                    // but don't act on it yet. We still might crash.
-                    winDirection.setRow(-1);
-                    winPoint = currentPoint;
-                    break;
-                case FINISH_DOWN:
-                    winDirection.setRow(1);
-                    winPoint = currentPoint;
-                    break;
-                case FINISH_LEFT:
-                    winDirection.setCol(-1);
-                    winPoint = currentPoint;
-                    break;
-                case FINISH_RIGHT:
-                    winDirection.setCol(1);
-                    winPoint = currentPoint;
-                    break;
-            }
-        }
-
-        // Test for win
-        if (winPoint != null) {
-            boolean isValidWin = true;
-            if ((winDirection.getRow() != 0 && !Util.isSignSame(winDirection.getRow(), player.getVelocity().getRow()))
-                    ||
-                    (winDirection.getCol() != 0 &&
-                            !Util.isSignSame(winDirection.getCol(), player.getVelocity().getCol()))) {
-                isValidWin = false;
-            }
-            if (isValidWin) {
-                mWinner = mCurrentPlayer;
-                player.setPos(winPoint);
-                return;
-            }
-        }
-
-
-        player.move();
-    }
-
     /**
-     * Returns all of the grid spaces in the path between two spaces.
+     * Returns all of the grid spaces in the path between two spaces, for
+     * use in determining line of sight.
      * @param startPoint Starting point as a GridPoint
      * @param endPoint Ending point as a GridPoint
      * @return Intervening grid spaces, as a List of GridPoints. Also
@@ -361,6 +320,84 @@ public class Track {
         return result;
     }
 
+    /**
+     * Find the type of track space at the given location. If the location
+     * is outside the track bounds, it is considered a wall.
+     * @param space The coordinates of the space to examine
+     * @return The type of track space at the given location
+     */
+    public SpaceType getSpace(final GridPoint space) {
+        // Anything out of bounds acts like a wall
+        if (space.getRow() >= mHeight || space.getRow() < 0 || space.getCol() >= mWidth || space.getCol() < 0) {
+            return SpaceType.WALL;
+        }
+
+        return mGrid.get(space.getRow()).get(space.getCol());
+    }
+
+
+    private void moveCurrentPlayer() {
+        Player player = mPlayers.get(mCurrentPlayer);
+
+        // Check for collisions and for winning
+        GridPoint startPoint = player.getPos();
+        GridPoint endPoint = player.getNextPos();
+
+        Set<GridPoint> pathPoints = getPath(startPoint, endPoint);
+        GridPoint winPoint = null;
+        GridPoint winDirection = new GridPoint(0, 0);
+        for (GridPoint currentPoint : pathPoints) {
+            switch(getSpace(currentPoint)) {
+                case TRACK:
+                    // No problems here, do nothing
+                    break;
+                case WALL:
+                    // Crash, and move directly to the location that
+                    // caused the crash. No need to keep going
+                    player.crash();
+                    player.setPos(currentPoint);
+                    return;
+                case FINISH_UP:
+                    // For all of the finishes, set up a potential win,
+                    // but don't act on it yet. We still might crash.
+                    winDirection.setRow(-1);
+                    winPoint = currentPoint;
+                    break;
+                case FINISH_DOWN:
+                    winDirection.setRow(1);
+                    winPoint = currentPoint;
+                    break;
+                case FINISH_LEFT:
+                    winDirection.setCol(-1);
+                    winPoint = currentPoint;
+                    break;
+                case FINISH_RIGHT:
+                    winDirection.setCol(1);
+                    winPoint = currentPoint;
+                    break;
+            }
+        }
+
+        // Test for win
+        if (winPoint != null) {
+            boolean isValidWin = true;
+            if ((winDirection.getRow() != 0 && !Util.isSignSame(winDirection.getRow(), player.getVelocity().getRow()))
+                    ||
+                    (winDirection.getCol() != 0 &&
+                            !Util.isSignSame(winDirection.getCol(), player.getVelocity().getCol()))) {
+                isValidWin = false;
+            }
+            if (isValidWin) {
+                mWinner = mCurrentPlayer;
+                player.setPos(winPoint);
+                return;
+            }
+        }
+
+
+        player.move();
+    }
+
 
     /**
      * Convert a string into a single row, adding it to the bottom of the
@@ -368,7 +405,7 @@ public class Track {
      * @param rowString A string containing a single row to add.
      * @param border The character to be interpreted as a wall/border.
      */
-    private void addGridRow(String rowString, char border) throws InvalidTrackFormatException {
+    private void addGridRow(final String rowString, final char border) throws InvalidTrackFormatException {
         int rowLength = rowString.length();
         List<SpaceType> row = new ArrayList<>(rowLength);
         for (int i = 0; i < rowLength; i++) {
@@ -389,16 +426,9 @@ public class Track {
                 // Unexpected character is a player, as long as we don't
                 // have too many players. Since mHeight hasn't yet been
                 // updated, the row is mHeight (not mHeight - 1).
-                boolean tooManyPlayers = true;
-                for (int playerNum = 0; playerNum < mPlayers.length; playerNum++) {
-                    if (mPlayers[playerNum] == null) {
-                        mPlayers[playerNum] = new Player(mHeight, i);
-                        row.add(SpaceType.TRACK);
-                        tooManyPlayers = false;
-                        break;
-                    }
-                }
-                if (tooManyPlayers) {
+                mPlayers.add(new Player(mHeight, i));
+                row.add(SpaceType.TRACK);
+                if (mPlayers.size() > MAX_PLAYERS) {
                     throw new InvalidTrackFormatException("Unexpected character in row " + Integer.toString(mHeight) +
                             " and column " + Integer.toString(i) + ": " + Character.toString(currentChar));
                 }
@@ -409,30 +439,7 @@ public class Track {
         mHeight++;
     }
 
-    public SpaceType getSpace(final GridPoint space) {
-        // Anything out of bounds acts like a wall
-        if (space.getRow() >= mHeight || space.getRow() < 0 || space.getCol() >= mWidth || space.getCol() < 0) {
-            return SpaceType.WALL;
-        }
-
-        return mGrid.get(space.getRow()).get(space.getCol());
-    }
 
 
-    public enum SpaceType {
-        WALL('#'),
-        TRACK(' '),
-        FINISH_UP('^'),
-        FINISH_DOWN('v'),
-        FINISH_LEFT('<'),
-        FINISH_RIGHT('>');
 
-        private final char value;
-
-        SpaceType(char c) {
-            value = c;
-        }
-
-
-    }
 }

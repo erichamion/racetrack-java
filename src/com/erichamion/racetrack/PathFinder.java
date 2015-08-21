@@ -1,12 +1,11 @@
 package com.erichamion.racetrack;
 
-import java.nio.file.Path;
 import java.util.*;
 
 /**
  * Created by me on 8/17/15.
  */
-public class Pathfinder {
+public class PathFinder {
     // Give impassable nodes a cost too high for anything else to match,
     // but not so high as to create any possibility of overflow.
     private static final double COST_IMPASSABLE = Double.MAX_VALUE / 1e6;
@@ -14,11 +13,11 @@ public class Pathfinder {
     private static final double COST_NEAR_WALL = 2.0;
     private static final double COST_DIRECTION_CONSTANT = 0.001;
 
-    private Queue<GridPoint> mPath = new LinkedList<>();
+    private Deque<GridPoint> mPath = new LinkedList<>();
 
 
 
-    public Pathfinder(final Track track, int playerIndex) {
+    public PathFinder(final Track track, final int playerIndex) {
         PathNode pathEnd = findBestPath(track, track.getPlayerPos(playerIndex));
         if (pathEnd != null) {
             //noinspection StatementWithEmptyBody
@@ -26,14 +25,32 @@ public class Pathfinder {
 
             PathNode currentNode = pathEnd;
             while (currentNode != null) {
-                mPath.add(currentNode.getPosition());
+                mPath.addFirst(currentNode.getPosition());
                 currentNode = currentNode.getPrev();
             }
         }
 
     }
 
-    private static PathNode findBestPath(final Track track, GridPoint start) {
+    /**
+     * Returns the next point on the calculated path without altering the
+     * path.
+     * @return The next point on the path
+     */
+    public GridPoint peekNextPathPoint() {
+        return (mPath.isEmpty()) ? null : mPath.peekFirst();
+    }
+
+    /**
+     * Removes and returns the next point on the calculated path.
+     * @return The next point on the path
+     */
+    public GridPoint getNextPathPoint() {
+        return (mPath.isEmpty()) ? null : mPath.removeFirst();
+    }
+
+
+    private static PathNode findBestPath(final Track track, final GridPoint start) {
         // Since we don't know where our goals are, use Dijkstra's algorithm.
         PriorityQueue<PathNode> frontier = new PriorityQueue<>(PathNode.costComparator);
         frontier.add(new PathNode(start, null, 0.0));
@@ -44,7 +61,7 @@ public class Pathfinder {
             PathNode currentNode = frontier.remove();
 
             // Fail when we run out of passable locations, or succeed when
-            // we reach a finish line or run out of passable locations.
+            // we reach a finish line.
             if (currentNode.getTotalCost() >= COST_IMPASSABLE) {
                 break;
             }
@@ -55,7 +72,7 @@ public class Pathfinder {
                 break;
             }
 
-            List<PathNode> neighbors = getNeighbors(currentNode);
+            PathNode[] neighbors = getNeighbors(currentNode);
             for (PathNode neighbor : neighbors) {
                 if (visited.contains(neighbor)) continue;
 
@@ -81,7 +98,7 @@ public class Pathfinder {
         return endNode;
     }
 
-    private boolean smoothPath(Track track, PathNode pathEnd) {
+    private boolean smoothPath(final Track track, final PathNode pathEnd) {
         boolean madeChanges = false;
         PathNode middleNode = pathEnd.getPrev();
         if (middleNode == null) {
@@ -121,16 +138,17 @@ public class Pathfinder {
      * The GridPoints may represent locations that are outside of the
      * track or otherwise invalid.
      */
-    private static List<PathNode> getNeighbors(final PathNode centerNode) {
-        List<PathNode> result = new ArrayList<>(8);
+    private static PathNode[] getNeighbors(final PathNode centerNode) {
+        PathNode[] result = new PathNode[8];
 
+        int arrayIndex = 0;
         GridPoint displacement = new GridPoint(-1, -1);
         for (; displacement.getRow() <= 1; displacement.setRow(displacement.getRow() + 1)) {
             for (displacement.setCol(-1); displacement.getCol() <= 1; displacement.setCol(displacement.getCol() + 1)) {
                 if (displacement.getRow() == 0 && displacement.getCol() == 0) continue;
 
                 GridPoint point = GridPoint.add(centerNode.getPosition(), displacement);
-                result.add(new PathNode(point, centerNode, Double.MAX_VALUE));
+                result[arrayIndex++] = new PathNode(point, centerNode, Double.MAX_VALUE);
             }
         }
 
@@ -161,7 +179,7 @@ public class Pathfinder {
         }
     }
 
-    private static double getOpenSpaceMoveCost(Track track, PathNode fromNode, PathNode toNode) {
+    private static double getOpenSpaceMoveCost(final Track track, final PathNode fromNode, final PathNode toNode) {
         // Prefer straight paths that don't hug the walls
         double baseCost = isNearWall(track, toNode) ? COST_NEAR_WALL : COST_OPEN;
         double directionPenalty = 0.0;
@@ -169,30 +187,19 @@ public class Pathfinder {
             GridPoint oldDirection =
                     GridPoint.subtract(fromNode.getPosition(), fromNode.getPrev().getPosition());
             GridPoint newDirection = GridPoint.subtract(toNode.getPosition(), fromNode.getPosition());
-            directionPenalty = COST_DIRECTION_CONSTANT * (1 - unitDotProduct(oldDirection, newDirection));
+            directionPenalty = COST_DIRECTION_CONSTANT * (1 - GridPoint.unitDotProduct(oldDirection, newDirection));
         }
         return baseCost + directionPenalty;
     }
 
     private static boolean isNearWall(final Track track, final PathNode node) {
-        List<PathNode> neighbors = getNeighbors(node);
+        PathNode[] neighbors = getNeighbors(node);
         for (PathNode neighbor : neighbors) {
             if (track.getSpace(neighbor.getPosition()) == Track.SpaceType.WALL) {
                 return true;
             }
         }
         return false;
-    }
-
-    private static int dotProduct(final GridPoint vectorA, final GridPoint vectorB) {
-        return (vectorA.getRow() * vectorB.getRow()) + (vectorA.getCol() * vectorB.getCol());
-    }
-
-    private static double unitDotProduct(final GridPoint vectorA, final GridPoint vectorB) {
-        int dot = dotProduct(vectorA, vectorB);
-        double lengthASquared = Math.pow(vectorA.getRow(), 2) + Math.pow(vectorA.getCol(), 2);
-        double lengthBSquared = Math.pow(vectorB.getRow(), 2) + Math.pow(vectorB.getCol(), 2);
-        return dot / Math.sqrt(lengthASquared * lengthBSquared);
     }
 
 
@@ -233,7 +240,7 @@ public class Pathfinder {
 
         public PathNode() { }
 
-        public PathNode(GridPoint pos, PathNode prev, double totalCost) {
+        public PathNode(final GridPoint pos, final PathNode prev, final double totalCost) {
             mPosition = new GridPoint(pos);
             mPrev = prev;
             mTotalCost = totalCost;
@@ -243,7 +250,7 @@ public class Pathfinder {
             return mTotalCost;
         }
 
-        public void setTotalCost(double totalCost) {
+        public void setTotalCost(final double totalCost) {
             mTotalCost = totalCost;
         }
 
@@ -255,12 +262,12 @@ public class Pathfinder {
             return mPrev;
         }
 
-        public void setPrev(PathNode prev) {
+        public void setPrev(final PathNode prev) {
             mPrev = prev;
         }
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(final Object obj) {
             if (obj instanceof PathNode) {
                 PathNode secondNode = (PathNode) obj;
                 return gridPointComparator.compare(this, secondNode) == 0;

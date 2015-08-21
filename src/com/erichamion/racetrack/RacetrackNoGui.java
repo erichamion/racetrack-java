@@ -3,14 +3,13 @@ package com.erichamion.racetrack;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.PrintStream;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 public class RacetrackNoGui {
 
     private static final Map<Character, GridPoint> KEYMAP = new HashMap<>();
     private static final Scanner STDIN = new Scanner(System.in);
+    private static final Map<Integer, PathFollower> mComputerPlayers = new HashMap<>();
 
     static {
         KEYMAP.put('1', new GridPoint(1, -1));
@@ -24,14 +23,25 @@ public class RacetrackNoGui {
         KEYMAP.put('9', new GridPoint(-1, 1));
     }
 
+
+
     public static void main(String[] args) {
-        if (args.length == 0) {
+        String filename = null;
+        List<Integer> playerIndices = new ArrayList<>();
+
+        for (String arg : args) {
+            if (arg.length() == 1 && arg.charAt(0) >= '1' && arg.charAt(0) <= '9') {
+                playerIndices.add(Integer.parseInt(arg) - 1);
+            } else {
+                filename = arg;
+            }
+        }
+
+        if (filename == null) {
             System.err.println("No filename given\n");
             printUsage(System.err);
             return;
         }
-
-        String filename = args[0];
 
         Track track;
         try {
@@ -44,16 +54,28 @@ public class RacetrackNoGui {
             return;
         }
 
-        Pathfinder player2finder = new Pathfinder(track, 1);
+        for (Integer playerIndex : playerIndices) {
+            if (playerIndex >= track.getPlayerCount()) continue;
+
+            PathFinder playerFinder = new PathFinder(track, playerIndex);
+            PathFollower playerFollower = new PathFollower(track, playerFinder, playerIndex);
+            mComputerPlayers.put(playerIndex, playerFollower);
+        }
 
 
         runTextGame(track);
     }
 
-    private static void printUsage(PrintStream outStream) {
+    private static void printUsage(final PrintStream outStream) {
         outStream.println("Usage:");
-        outStream.println("    <command> <filename>");
-        outStream.println("Where <filename> is the path to a track file to load.");
+        outStream.println("    <command> [n1 [n2...]] <filename>");
+        outStream.println("Where n1, n2, etc. are player numbers 1-9 for computer control,");
+        outStream.println("and <filename> is the path to a track file to load.");
+        outStream.println("");
+        outStream.println("Example: <command> 2 4 tracks/mytrack.txt");
+        outStream.println("    Loads the track file 'tracks/mytrack.txt', and (as long as the track");
+        outStream.println("    is for at least 4 players) designates players 2 and 4 as computer");
+        outStream.println("    controlled. All other players are keyboard controlled.");
     }
 
     private static void printDirections() {
@@ -67,28 +89,42 @@ public class RacetrackNoGui {
         System.out.println(outStr);
     }
 
-    private static GridPoint getTextInput(String prompt, Track track) {
+    private static GridPoint getTextInput(final String prompt, final Track track) {
         GridPoint result = null;
         do {
             System.out.print(prompt + ": ");
-            char inputChar = STDIN.nextLine().charAt(0);
-            if (inputChar == 'h') {
-                printDirections();
-            } else if (inputChar == 't') {
-                System.out.println(track.toString());
-            } else if (KEYMAP.containsKey(inputChar)) {
-                result = new GridPoint(KEYMAP.get(inputChar));
+            String line = STDIN.nextLine();
+            if (line.length() > 0) {
+                char inputChar = line.charAt(0);
+                if (inputChar == 'h') {
+                    printDirections();
+                } else if (inputChar == 't') {
+                    System.out.println(track.toString());
+                } else if (KEYMAP.containsKey(inputChar)) {
+                    result = new GridPoint(KEYMAP.get(inputChar));
+                }
             }
         } while (result == null);
 
         return result;
     }
 
-    private static void runTextGame(Track track) {
+    private static void runTextGame(final Track track) {
         while (track.getWinner() == Track.NO_WINNER) {
             System.out.println(track.toString());
-            System.out.println("\nPLAYER " + (track.getCurrentPlayer() + 1) + ":");
-            GridPoint acceleration = getTextInput("Acceleration direction (h for help)", track);
+            int currentPlayer = track.getCurrentPlayer();
+            System.out.println("\nPLAYER " + (currentPlayer + 1) + ":");
+            PathFollower follower = mComputerPlayers.get(currentPlayer);
+            GridPoint acceleration;
+            if (follower == null) {
+                // Get human input
+                acceleration = getTextInput("Acceleration direction (h for help)", track);
+            } else {
+                // Computer player
+                System.out.print("Press Enter to continue.");
+                STDIN.nextLine();
+                acceleration = follower.getMove();
+            }
             track.doPlayerTurn(acceleration);
         }
         System.out.println(track.toString());
