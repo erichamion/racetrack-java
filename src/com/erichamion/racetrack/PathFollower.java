@@ -72,11 +72,12 @@ public class PathFollower {
             candidates.add(direction);
         }
 
-        // Get the best move that doesn't crash immediately into a wall
+        // Get the best move that doesn't crash immediately into a wall or
+        // another player.
         GridPoint result = null;
         do {
             GridPoint candidate = candidates.remove();
-            if (mTrack.getSpace(moveMap.getPosition(candidate)) != Track.SpaceType.WALL) {
+            if (!mTrack.willPlayerCrash(mPlayerIndex, moveMap.getPosition(candidate))) {
                 result = candidate;
             }
         } while (result == null && !candidates.isEmpty());

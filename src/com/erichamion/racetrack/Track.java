@@ -108,8 +108,7 @@ public class Track {
                     Player player = mPlayers.get(playerNum);
                     if (player.getPos().getCol() == colIndex && player.getPos().getRow() == rowIndex) {
                         hasPlayer = true;
-                        result.append(currentSpace == SpaceType.WALL ?
-                                CRASH_INDICATOR : Integer.toString(playerNum + 1));
+                        result.append(player.isCrashed() ? CRASH_INDICATOR : Integer.toString(playerNum + 1));
 
                         // Only put one player indicator in a given space
                         break;
@@ -335,6 +334,10 @@ public class Track {
         return mGrid.get(space.getRow()).get(space.getCol());
     }
 
+    public boolean willPlayerCrash(int playerIndex, GridPoint position) {
+        return (getSpace(position) == SpaceType.WALL || testPlayerCollision(playerIndex, position));
+    }
+
 
     private void moveCurrentPlayer() {
         Player player = mPlayers.get(mCurrentPlayer);
@@ -349,7 +352,11 @@ public class Track {
         for (GridPoint currentPoint : pathPoints) {
             switch(getSpace(currentPoint)) {
                 case TRACK:
-                    // No problems here, do nothing
+                    // As long as we don't collide with another car, do
+                    // nothing.
+                    if (testPlayerCollision(mCurrentPlayer, endPoint)) {
+                        player.crash();
+                    }
                     break;
                 case WALL:
                     // Crash, and move directly to the location that
@@ -396,6 +403,18 @@ public class Track {
 
 
         player.move();
+    }
+
+    private boolean testPlayerCollision(int playerIndex, GridPoint location) {
+        for (int i = 0; i < mPlayers.size(); i++) {
+            // Don't check the player against itself
+            if (i == playerIndex) continue;
+
+            if (mPlayers.get(i).getPos().equals(location)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 
