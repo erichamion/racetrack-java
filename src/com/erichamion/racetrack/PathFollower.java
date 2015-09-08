@@ -68,9 +68,7 @@ public class PathFollower {
         }
 
         Queue<GridPoint> candidates = new PriorityQueue<>(ALL_DIRECTIONS.length, comparator);
-        for (GridPoint direction : ALL_DIRECTIONS) {
-            candidates.add(direction);
-        }
+        Collections.addAll(candidates, ALL_DIRECTIONS);
 
         // Get the best move that doesn't crash immediately into a wall or
         // another player.

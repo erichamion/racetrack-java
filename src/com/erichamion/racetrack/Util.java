@@ -1,8 +1,5 @@
 package com.erichamion.racetrack;
 
-import java.util.Iterator;
-import java.util.PriorityQueue;
-
 /**
  * Created by me on 8/16/15.
  */
